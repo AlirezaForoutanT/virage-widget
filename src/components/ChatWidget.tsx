@@ -1,29 +1,67 @@
 // src/components/ChatWidget.tsx
 "use client";
-
 import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+
 import { Send, MessageCircle } from "lucide-react";
-import clsx from "clsx";
-import { getSocket } from "@/utils/socket";
-import ChatBubble, { ChatMessage } from "./ChatBubble";
 import { FaTimes } from "react-icons/fa";
 
-interface ChatWidgetProps {
-  userId: string;
-}
+import clsx from "clsx";
 
-export default function ChatWidget(props: ChatWidgetProps) {
-  const { userId } = props;
+import ChatBubble, { ChatMessage } from "./ChatBubble";
+
+import { getSocket } from "@/utils/socket";
+import type { Socket } from "socket.io-client";
+
+export default function ChatWidget() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [typing, setTyping] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const [dotCount, setDotCount] = useState(1);
+  const [userId, setUserId] = useState<string>();
 
-  // Singleton WebSocket client
-  const socketRef = useRef(getSocket());
+  const socketRef = useRef<Socket | null>(null);
+
+  /* ───────────────────────────────────────
+     1.  Get the Socket.IO client once and register listeners
+  ─────────────────────────────────────── */
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      const s = await getSocket();
+
+      const tok = localStorage.getItem("virage_jwt")!;
+      const payload = JSON.parse(atob(tok.split(".")[1]));
+      setUserId(payload.sub);
+
+      if (!mounted) return;
+      socketRef.current = s;
+
+      /** Incoming message → animate */
+      const onPrivate = (msg: { data: string }) => {
+        setTyping(false);
+        animateResponse(msg.data);
+      };
+
+      s.on("privateChatMessage", onPrivate);
+      s.on("userTyping", () => setTyping(true));
+      s.on("stoppedTyping", () => setTyping(false));
+
+      // Cleanup when component unmounts
+      return () => {
+        s.off("privateChatMessage", onPrivate);
+        s.off("userTyping", () => setTyping(true));
+        s.off("stoppedTyping", () => setTyping(false));
+      };
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Scroll to bottom whenever messages or typing flag change
   useEffect(() => {
@@ -46,55 +84,42 @@ export default function ChatWidget(props: ChatWidgetProps) {
     return () => clearInterval(timer);
   }, [typing]);
 
-  // Register socket listeners
-  useEffect(() => {
-    const s = socketRef.current;
+  /* ───────────────────────────────────────
+     Helper: animate AI reply letter-by-letter
+  ─────────────────────────────────────── */
+  const animateResponse = (fullText: string) => {
+    const id = crypto.randomUUID();
+    setMessages((prev) => [...prev, { id, from: "ai", text: "" }]);
+    let idx = 0;
+    const interval = setInterval(() => {
+      idx++;
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === id ? { ...m, text: fullText.slice(0, idx) } : m
+        )
+      );
+      if (idx >= fullText.length) {
+        clearInterval(interval);
+      }
+    }, 20);
+  };
 
-    s.on("privateChatMessage", (msg: { data: string }) => {
-      setTyping(false);
-      animateResponse(msg.data);
-    });
-
-    // Helper to animate the AI response
-    const animateResponse = (fullText: string) => {
-      const id = crypto.randomUUID();
-      setMessages((prev) => [...prev, { id, from: "ai", text: "" }]);
-      let idx = 0;
-      const interval = setInterval(() => {
-        idx++;
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === id ? { ...m, text: fullText.slice(0, idx) } : m
-          )
-        );
-        if (idx >= fullText.length) {
-          clearInterval(interval);
-          setMessages((prev) => prev.map((m) => (m.id === id ? { ...m } : m)));
-        }
-      }, 50);
-    };
-
-    s.on("userTyping", () => setTyping(true));
-    s.on("stoppedTyping", () => setTyping(false));
-
-    return () => {
-      s.off("privateChatMessage");
-      s.off("userTyping");
-      s.off("stoppedTyping");
-    };
-  }, []);
-
-  // Handle form submit
+  /* ───────────────────────────────────────
+     Send chat message
+  ─────────────────────────────────────── */
   const handleSend = () => {
     const text = input.trim();
-    if (!text) return;
+    if (!text || !socketRef.current) return;
+
     const id = crypto.randomUUID();
     setMessages((prev) => [...prev, { id, from: "user", text }]);
+
     const s = socketRef.current;
 
-    // Immediately notify server that user stopped typing
-    s.emit("stoppedTyping", {
+    // Tell server we stopped typing
+    s.emit("typing", {
       userId,
+      typing: false,
     });
 
     // Send the actual message
@@ -106,6 +131,32 @@ export default function ChatWidget(props: ChatWidgetProps) {
     setInput("");
   };
 
+  /* ───────────────────────────────────────
+     On user keystroke → emit typing event (debounced 300 ms)
+  ─────────────────────────────────────── */
+  const typingTimeout = useRef<NodeJS.Timeout | null>(null);
+  const handleInputChange = (val: string) => {
+    setInput(val);
+    if (!socketRef.current) return;
+
+    if (typingTimeout.current) {
+      clearTimeout(typingTimeout.current);
+    }
+    socketRef.current.emit("typing", {
+      userId,
+      typing: true,
+    });
+    typingTimeout.current = setTimeout(() => {
+      socketRef.current?.emit("typing", {
+        userId,
+        typing: false,
+      });
+    }, 3_000);
+  };
+
+  /* ───────────────────────────────────────
+     Render
+  ─────────────────────────────────────── */
   return (
     <>
       {/* Floating chat button */}
@@ -139,10 +190,10 @@ export default function ChatWidget(props: ChatWidgetProps) {
               </button>
             </div>
 
-            {/* Messages list */}
+            {/* Messages */}
             <div
               ref={listRef}
-              className="flex-1 overflow-y-auto px-3 py-2 space-y-1 scrollbar"
+              className="flex-1 space-y-1 overflow-y-auto px-3 py-2 scrollbar"
             >
               {messages.map((m) => (
                 <ChatBubble key={m.id} message={m} />
@@ -158,7 +209,7 @@ export default function ChatWidget(props: ChatWidgetProps) {
               )}
             </div>
 
-            {/* Input area */}
+            {/* Input */}
             <form
               className="flex items-center gap-1 border-t border-gray-200 p-2 dark:border-gray-700"
               onSubmit={(e) => {
@@ -170,19 +221,13 @@ export default function ChatWidget(props: ChatWidgetProps) {
                 className="flex-1 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-primary-500 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                 placeholder="Write a message…"
                 value={input}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setInput(val);
-                  socketRef.current.emit("typing", {
-                    userId,
-                  });
-                }}
+                onChange={(e) => handleInputChange(e.target.value)}
               />
               <button
                 type="submit"
                 className={clsx(
                   "rounded-md p-2 text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-800",
-                  !input.trim() && "opacity-30 cursor-not-allowed"
+                  !input.trim() && "cursor-not-allowed opacity-30"
                 )}
                 disabled={!input.trim()}
               >

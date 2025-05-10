@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import ChatWidget from "@/components/ChatWidget";
-import { getGuestId } from "@/utils/guest";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,16 +20,12 @@ export const metadata: Metadata = {
 
 /**
  * RootLayout wraps every page and injects the ChatWidget.
- * Uses a persistent guest ID for anonymous users and
- * default org/convId/topic for local testing.
  */
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Generate or retrieve the persistent guest ID
-  const userId = getGuestId();
   return (
     <html lang="en">
       <body
@@ -38,7 +33,7 @@ export default function RootLayout({
       >
         {children}
         {/* Global chat widget injected at bottom-right */}
-        <ChatWidget userId={userId} />
+        <ChatWidget />
       </body>
     </html>
   );

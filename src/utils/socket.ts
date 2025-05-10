@@ -1,34 +1,53 @@
-// src/utils/socket.ts
-import { io, Socket } from "socket.io-client";
-import { getGuestId } from "./guest";
+import { io, Socket } from 'socket.io-client';
+import { getJwt } from './guestToken';
 
-let socket: Socket | null = null;
+let socketPromise: Promise<Socket> | null = null;
 
 /**
- * Initialize and return a singleton Socket.IO client.
- * Passes JWT from localStorage as auth token.
+ * Get a singleton Socket.IO client.
+ * Always resolves to a *connected* socket with a valid JWT in its auth payload.
  */
-export function getSocket(): Socket {
-  if (socket) return socket;
+export async function getSocket(): Promise<Socket> {
+  if (socketPromise) return socketPromise;
 
-  // Retrieve auth token however we decidevto store it (cookie/localStorage)
-  // Use guest ID for anonymous testing
-  const token = getGuestId();
+  socketPromise = (async () => {
+    const url =
+      process.env.NEXT_PUBLIC_VIRAGE_WS_URL ?? 'ws://localhost:8000';
+    const token = await getJwt();
 
-  socket = io(process.env.NEXT_PUBLIC_VIRAGE_WS_URL || "ws://localhost:8000", {
-    transports: ["websocket"],
-    auth: {
-      token,
-    },
-    reconnectionAttempts: 3,
-    reconnectionDelay: 1000, //Automatically retries up to 3 tim...ection drops, waiting 1 second (1000 ms) between attempts. ?????
-    timeout: 20000,
-  });
+    const sock = io(url, {
+      transports: ['websocket'],
+      auth: { token },
+      timeout: 20_000,
+      reconnectionAttempts: 3,
+      reconnectionDelay: 1_000,
+    });
 
-  // log connection events
-  socket.on("connect", () => console.log("WS connected:", socket?.id));
-  socket.on("disconnect", (reason) => console.warn("WS disconnected:", reason));
-  socket.on("connect_error", (err) => console.error("WS connect_error:", err));
+    // ── Logging helpers
+    sock.once('connect', () => console.log('[ws] connected', sock.id));
+    sock.on('disconnect', (reason) =>
+      console.warn('[ws] disconnected:', reason),
+    );
+    sock.on('connect_error', (err) =>
+      console.error('[ws] connect_error:', err),
+    );
 
-  return socket;
+    /**
+     * If the backend emits `"Invalid or expired token"`, transparently refresh and reconnect.
+     */
+    sock.on('error', async (msg: unknown) => {
+      if (msg === 'Invalid or expired token') {
+        console.info('[ws] token expired – refreshing…');
+        const fresh = await getJwt(true); // force refresh
+        // You can’t change auth mid‑flight, so disconnect then reconnect
+        sock.auth = { token: fresh };
+        sock.disconnect();
+        sock.connect();
+      }
+    });
+
+    return sock;
+  })();
+
+  return socketPromise;
 }
