@@ -3,8 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
-import { Send, MessageCircle, Smile } from "lucide-react";
-import { FaTimes } from "react-icons/fa";
+import { Send, Smile } from "lucide-react";
 
 import clsx from "clsx";
 
@@ -16,8 +15,11 @@ import type { Socket } from "socket.io-client";
 import { CountdownCircleTimer } from "react-countdown-circle-timer";
 import EmojiPicker, { Theme, EmojiClickData } from "emoji-picker-react";
 
-export default function ChatWidget() {
-  const [open, setOpen] = useState(false);
+export default function ChatWidget({}: // initiallyOpen = false,
+{
+  initiallyOpen?: boolean;
+  showToggleButton?: boolean;
+}) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [typing, setTyping] = useState(false);
@@ -72,6 +74,7 @@ export default function ChatWidget() {
         console.error("[ws] error:", msg);
         if (msg === "Too many messages") {
           setMessageTimeOut(true);
+          setInput("");
         }
       });
 
@@ -189,144 +192,137 @@ export default function ChatWidget() {
   ─────────────────────────────────────── */
   return (
     <>
-      {/* Floating chat button */}
-      <button
-        className="fixed bottom-6 right-6 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-primary-600 text-white shadow-lg focus:outline-none"
-        onClick={() => setOpen((o) => !o)}
-      >
-        <MessageCircle className="h-6 w-6" />
-      </button>
-
       {/* Chat panel */}
       <AnimatePresence>
-        {open && (
-          <motion.div
-            key="chat-panel"
-            initial={{ y: 300, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 300, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 260, damping: 20 }}
-            className="fixed bottom-20 right-6 z-50 flex h-96 w-80 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900"
+        <motion.div
+          key="chat-panel"
+          initial={{ y: 300, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 300, opacity: 0 }}
+          transition={{ type: "spring", stiffness: 260, damping: 20 }}
+          className="fixed z-50 flex h-full w-full flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between bg-primary-600 px-3 py-2 text-white">
+            <span>Virage Assistant</span>
+          </div>
+
+          {/* Messages */}
+          <div
+            ref={listRef}
+            className="flex-1 space-y-2 overflow-y-auto px-3 py-2 chat-scrollbar"
           >
-            {/* Header */}
-            <div className="flex items-center justify-between bg-primary-600 px-3 py-2 text-white">
-              <span>Virage Assistant</span>
-              <button
-                onClick={() => setOpen(false)}
-                aria-label="Close"
-                className="hover:opacity-80"
-              >
-                <FaTimes />
-              </button>
-            </div>
+            {messages.map((m) => (
+              <ChatBubble key={m.id} message={m} />
+            ))}
+            {typing && (
+              <ChatBubble
+                message={{
+                  id: "typing",
+                  from: "ai",
+                  text: ".".repeat(dotCount),
+                }}
+              />
+            )}
+          </div>
 
-            {/* Messages */}
-            <div
-              ref={listRef}
-              className="flex-1 space-y-2 overflow-y-auto px-3 py-2 scrollbar"
-            >
-              {messages.map((m) => (
-                <ChatBubble key={m.id} message={m} />
-              ))}
-              {typing && (
-                <ChatBubble
-                  message={{
-                    id: "typing",
-                    from: "ai",
-                    text: ".".repeat(dotCount),
-                  }}
-                />
-              )}
-            </div>
-
-            {/* Input */}
-            <form
-              className="relative flex items-center gap-2 border-t border-gray-200 p-2 dark:border-gray-700"
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSend();
-              }}
-            >
-              <div className="relative flex-1">
-                <textarea
-                  className="w-full rounded-md border border-gray-300 px-2 py-2 text-sm focus:border-primary-500 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-                  placeholder="Write a message…"
-                  value={input}
-                  rows={1}
-                  ref={textareaRef}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey && !messageTimeOut) {
-                      e.preventDefault();
-                      handleSend();
-                    }
-                  }}
-                  onChange={(e) => handleInputChange(e.target.value)}
-                />
-                {/* Emoji button */}
-                <button
-                  type="button"
-                  className="absolute top-4.5 right-2 -translate-y-1/2 rounded p-1 cursor-pointer text-primary-600 hover:text-amber-300 dark:hover:bg-gray-800"
-                  onClick={() => setShowPicker((v) => !v)}
-                >
-                  <Smile className="h-4.5 w-4.5" />
-                </button>
-              </div>
-              {/* Picker pop-up */}
-              {showPicker && (
-                <div
-                  className="absolute bottom-15 z-50 "
-                  style={{ "--epr-emoji-size": "6px" } as React.CSSProperties}
-                >
-                  <EmojiPicker
-                    reactionsDefaultOpen={true}
-                    theme={Theme.DARK}
-                    onEmojiClick={(emojiData: EmojiClickData) => {
-                      insertEmoji(emojiData.emoji);
-                      setShowPicker(false);
-                    }}
-                    searchDisabled={true}
-                    previewConfig={{ showPreview: false }}
-                    width={300}
-                    height={315}
-                    style={
-                      {
-                        "--epr-emoji-size": "20px",
-                      } as React.CSSProperties
-                    }
-                  ></EmojiPicker>
-                </div>
-              )}
-              <button
-                type="submit"
+          {/* Input */}
+          <form
+            className="relative flex items-center gap-2 border-t border-gray-200 p-2 dark:border-gray-700"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSend();
+            }}
+          >
+            <div className="relative flex-1">
+              <textarea
                 className={clsx(
-                  "rounded-md p-2 text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-800 mb-1.5",
-                  !input.trim() && "cursor-not-allowed opacity-30"
+                  "w-full resize-none max-h-24 rounded-md border px-2 py-2 text-sm focus:outline-none",
+                  messageTimeOut
+                    ? "border-green-500 placeholder-green-800  bg-red-50 dark:bg-green-500 placeholder:font-bold"
+                    : "border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                 )}
-                disabled={!input.trim() || messageTimeOut}
+                placeholder={
+                  messageTimeOut ? "Please wait 5 seconds" : "Write a message…"
+                }
+                value={input}
+                rows={1}
+                ref={textareaRef}
+                disabled={messageTimeOut}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !messageTimeOut) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                onChange={(e) => handleInputChange(e.target.value)}
+              />
+              {/* Emoji button */}
+              <button
+                type="button"
+                className="absolute top-4.5 right-2 -translate-y-1/2 rounded p-1 cursor-pointer text-primary-600 hover:text-amber-300 dark:hover:bg-gray-800"
+                onClick={() => setShowPicker((v) => !v)}
               >
-                {messageTimeOut ? (
-                  <div>
-                    <CountdownCircleTimer
-                      duration={5}
-                      colors="#4c51bf"
-                      size={20}
-                      strokeWidth={1}
-                      trailStrokeWidth={2}
-                      isPlaying={messageTimeOut}
-                      onComplete={() => {
-                        setMessageTimeOut(false);
-                      }}
-                    >
-                      {/* {({ remainingTime }) => remainingTime} */}
-                    </CountdownCircleTimer>
-                  </div>
-                ) : (
-                  <Send className="h-5 w-5" />
-                )}
+                <Smile className="h-4.5 w-4.5" />
               </button>
-            </form>
-          </motion.div>
-        )}
+            </div>
+            {/* Picker pop-up */}
+            {showPicker && (
+              <div
+                className="absolute bottom-15 z-50 chat-scrollbar"
+                style={{ "--epr-emoji-size": "6px" } as React.CSSProperties}
+              >
+                <EmojiPicker
+                  reactionsDefaultOpen={true}
+                  theme={Theme.DARK}
+                  onEmojiClick={(emojiData: EmojiClickData) => {
+                    insertEmoji(emojiData.emoji);
+                    setShowPicker(false);
+                  }}
+                  searchDisabled={true}
+                  previewConfig={{ showPreview: false }}
+                  width={300}
+                  height={315}
+                  style={
+                    {
+                      "--epr-emoji-size": "20px",
+                    } as React.CSSProperties
+                  }
+                ></EmojiPicker>
+              </div>
+            )}
+            <button
+              type="submit"
+              className="rounded-md p-2 text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-800 mb-1.5"
+              disabled={!input.trim() || messageTimeOut}
+            >
+              {messageTimeOut ? (
+                <div>
+                  <CountdownCircleTimer
+                    duration={5}
+                    colors="#1f8703"
+                    size={20}
+                    strokeWidth={1}
+                    trailStrokeWidth={2}
+                    isPlaying={messageTimeOut}
+                    onComplete={() => {
+                      setMessageTimeOut(false);
+                    }}
+                  >
+                    {/* {({ remainingTime }) => remainingTime} */}
+                  </CountdownCircleTimer>
+                </div>
+              ) : (
+                <Send
+                  className={clsx(
+                    "h5 w5",
+                    !input.trim() && "cursor-not-allowed opacity-30"
+                  )}
+                />
+              )}
+            </button>
+          </form>
+        </motion.div>
       </AnimatePresence>
     </>
   );

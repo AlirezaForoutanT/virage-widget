@@ -24,3 +24,38 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+nextjs-portal {
+  display: none !important;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;     
+  scrollbar-width: thin; 
+
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;               
+}
+
+.chat-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #242f41 transparent;
+}
+.chat-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.chat-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.chat-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #D1D5DB;
+  border-radius: 3px;
+}
+/* dark-mode overrides */
+.dark .chat-scrollbar {
+  scrollbar-color: #4A5568 transparent;
+}
+.dark .chat-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #4A5568;
+}

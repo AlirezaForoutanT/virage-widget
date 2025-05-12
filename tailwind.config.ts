@@ -34,7 +34,8 @@ const config: Config = {
   },
   plugins: [
     animatePlugin,
-    scrollbarPlugin({ nocompatible: true }),
+    scrollbarPlugin({ nocompatible: false }),
+    
   ],
 }
 
