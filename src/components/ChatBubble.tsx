@@ -4,7 +4,7 @@ import clsx from "clsx";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { User } from "lucide-react";
-import * as Avatar from "@radix-ui/react-avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export interface ChatMessage {
   id: string;
@@ -33,19 +33,12 @@ export default function ChatBubble({ message }: ChatBubbleProps) {
     >
       {/* AI Avatar */}
       {!isUser && (
-        <Avatar.Root className="mr-2 shrink-0">
-          <Avatar.Image
-            src="/ai.svg"
-            alt="Virage Assistant"
-            className="h-5 w-5 rounded-full"
-          />
-          <Avatar.Fallback
-            delayMs={600}
-            className="h-5 w-5 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-xs text-gray-500 dark:text-gray-300"
-          >
-            VA
-          </Avatar.Fallback>
-        </Avatar.Root>
+        <div className="mr-2 shrink-0">
+          <Avatar className="h-6 w-6">
+            <AvatarImage src="/ai.svg" alt="Virage Assistant" />
+            <AvatarFallback>CN</AvatarFallback>
+          </Avatar>
+        </div>
       )}
 
       {/* Bubble */}
