@@ -1,9 +1,10 @@
+// src/components/ChatBubble.tsx
 import { motion } from "framer-motion";
 import clsx from "clsx";
 import ReactMarkdown from "react-markdown";
-import { User } from "lucide-react";
-import { Avatar } from "@chatscope/chat-ui-kit-react";
 import remarkGfm from "remark-gfm";
+import { User } from "lucide-react";
+import * as Avatar from "@radix-ui/react-avatar";
 
 export interface ChatMessage {
   id: string;
@@ -16,7 +17,6 @@ interface ChatBubbleProps {
 }
 
 // A single chat message bubble with basic markdown support.
-
 export default function ChatBubble({ message }: ChatBubbleProps) {
   const isUser = message.from === "user";
   const timeString = new Date().toLocaleTimeString([], {
@@ -33,9 +33,19 @@ export default function ChatBubble({ message }: ChatBubbleProps) {
     >
       {/* AI Avatar */}
       {!isUser && (
-        <div className="mr-2 shrink-0 text-primary-600 h-5 w-5">
-          <Avatar src="/ai.svg" name="Virage Assistant" />
-        </div>
+        <Avatar.Root className="mr-2 shrink-0">
+          <Avatar.Image
+            src="/ai.svg"
+            alt="Virage Assistant"
+            className="h-5 w-5 rounded-full"
+          />
+          <Avatar.Fallback
+            delayMs={600}
+            className="h-5 w-5 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-xs text-gray-500 dark:text-gray-300"
+          >
+            VA
+          </Avatar.Fallback>
+        </Avatar.Root>
       )}
 
       {/* Bubble */}
