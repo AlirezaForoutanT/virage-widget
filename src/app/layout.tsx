@@ -1,7 +1,9 @@
+// src/app/layout.tsx
+import { AuthProvider } from "@/providers/AuthProvider";
+import { SocketProvider } from "@/providers/SocketProvider";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import ChatWidget from "@/components/ChatWidget";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,10 +19,6 @@ export const metadata: Metadata = {
   title: "Virage AI Widget",
   description: "Embedded AI assistant for anonymous visitors",
 };
-
-/**
- * RootLayout wraps every page and injects the ChatWidget.
- */
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -31,9 +29,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
-        {/* Global chat widget injected at bottom-right */}
-        <ChatWidget />
+        <AuthProvider>
+          <SocketProvider>{children}</SocketProvider>
+        </AuthProvider>
       </body>
     </html>
   );

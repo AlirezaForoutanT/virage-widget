@@ -9,28 +9,28 @@ import clsx from "clsx";
 
 import ChatBubble, { ChatMessage } from "./ChatBubble";
 
-import { getSocket } from "@/utils/socket";
-import type { Socket } from "socket.io-client";
+import { useSocket } from "@/providers/SocketProvider";
+import { useAuth } from "@/providers/AuthProvider";
 
 import { CountdownCircleTimer } from "react-countdown-circle-timer";
 import EmojiPicker, { Theme, EmojiClickData } from "emoji-picker-react";
 
-export default function ChatWidget({}: // initiallyOpen = false,
-{
+interface Props {
   initiallyOpen?: boolean;
   showToggleButton?: boolean;
-}) {
+}
+
+export default function ChatWidget({}: Props) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [typing, setTyping] = useState(false);
   const [messageTimeOut, setMessageTimeOut] = useState(false);
-  const listRef = useRef<HTMLDivElement>(null);
   const [dotCount, setDotCount] = useState(1);
-  const [userId, setUserId] = useState<string>();
   const [showPicker, setShowPicker] = useState(false);
 
-  const socketRef = useRef<Socket | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const typingTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const insertEmoji = (emoji: string) => {
     if (!textareaRef.current) return;
@@ -45,70 +45,54 @@ export default function ChatWidget({}: // initiallyOpen = false,
       el.focus();
     }, 0);
   };
-  /* ───────────────────────────────────────
-     1.  Get the Socket.IO client once and register listeners
-  ─────────────────────────────────────── */
+  /* -----------------------------------------------------------
+     context: auth + socket
+  ----------------------------------------------------------- */
+  const { userId } = useAuth();
+  const socket = useSocket();
+
+  /* -----------------------------------------------------------
+     mount socket listeners once we have userId
+  ----------------------------------------------------------- */
   useEffect(() => {
-    let mounted = true;
+    if (!socket || !userId) return;
 
-    (async () => {
-      const s = await getSocket();
+    /* incoming replies */
+    const onPrivate = (msg: { data: string }) => {
+      setTyping(false);
+      animateResponse(msg.data);
+    };
 
-      const tok = localStorage.getItem("virage_jwt")!;
-      const payload = JSON.parse(atob(tok.split(".")[1]));
-      setUserId(payload.sub);
-
-      if (!mounted) return;
-      socketRef.current = s;
-
-      /** Incoming message → animate */
-      const onPrivate = (msg: { data: string }) => {
-        setTyping(false);
-        animateResponse(msg.data);
-      };
-
-      s.on("privateChatMessage", onPrivate);
-      s.on("userTyping", () => setTyping(true));
-      s.on("stoppedTyping", () => setTyping(false));
-      s.on("error", async (msg: unknown) => {
-        console.error("[ws] error:", msg);
-        if (msg === "Too many messages") {
-          setMessageTimeOut(true);
-          setInput("");
-        }
-      });
-
-      // Cleanup when component unmounts
-      return () => {
-        s.off("privateChatMessage", onPrivate);
-        s.off("userTyping", () => setTyping(true));
-        s.off("stoppedTyping", () => setTyping(false));
-      };
-    })();
+    socket.on("privateChatMessage", onPrivate);
+    socket.on("userTyping", () => setTyping(true));
+    socket.on("stoppedTyping", () => setTyping(false));
+    socket.on("error", async (msg: unknown) => {
+      console.error("[ws] error:", msg);
+      if (msg === "Too many messages") {
+        setMessageTimeOut(true);
+        setInput("");
+      }
+    });
 
     return () => {
-      mounted = false;
+      socket.off("privateChatMessage", onPrivate);
+      socket.off("userTyping");
+      socket.off("stoppedTyping");
     };
-  }, []);
+  }, [socket, userId]);
 
   // Scroll to bottom whenever messages or typing flag change
-  useEffect(() => {
-    if (listRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight;
-    }
+    useEffect(() => {
+    listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [messages, typing]);
 
   //typing animation
   // Animate the typing indicator with a dot count (1-3)
   useEffect(() => {
-    let timer: ReturnType<typeof setInterval>;
-    if (typing) {
-      timer = setInterval(() => {
-        setDotCount((c) => (c % 3) + 1);
-      }, 250);
-    } else {
-      setDotCount(1);
-    }
+    if (!typing) return setDotCount(1);
+    const timer = setInterval(() => {
+      setDotCount((c) => (c % 3) + 1);
+    }, 250);
     return () => clearInterval(timer);
   }, [typing]);
 
@@ -140,26 +124,16 @@ export default function ChatWidget({}: // initiallyOpen = false,
   ─────────────────────────────────────── */
   const handleSend = () => {
     const text = input.trim();
-    if (!text || !socketRef.current) return;
+    if (!text || !socket || !userId) return;
 
     const id = crypto.randomUUID();
     setMessages((prev) => [
       ...prev,
       { id, from: "user", text, ts: Date.now() },
     ]);
-    const s = socketRef.current;
 
-    // Tell server we stopped typing
-    s.emit("typing", {
-      userId,
-      typing: false,
-    });
-
-    // Send the actual message
-    s.emit("sendPrivateMessage", {
-      userId,
-      message: text,
-    });
+    socket.emit("typing", { userId, typing: false });
+    socket.emit("sendPrivateMessage", { userId, message: text });
 
     setInput("");
   };
@@ -167,23 +141,15 @@ export default function ChatWidget({}: // initiallyOpen = false,
   /* ───────────────────────────────────────
      On user keystroke → emit typing event (debounced 300 ms)
   ─────────────────────────────────────── */
-  const typingTimeout = useRef<NodeJS.Timeout | null>(null);
   const handleInputChange = (val: string) => {
     setInput(val);
-    if (!socketRef.current) return;
+    if (!socket || !userId) return;
 
-    if (typingTimeout.current) {
-      clearTimeout(typingTimeout.current);
-    }
-    socketRef.current.emit("typing", {
-      userId,
-      typing: true,
-    });
+    if (typingTimeout.current) clearTimeout(typingTimeout.current);
+
+    socket.emit("typing", { userId, typing: true });
     typingTimeout.current = setTimeout(() => {
-      socketRef.current?.emit("typing", {
-        userId,
-        typing: false,
-      });
+      socket.emit("typing", { userId, typing: false });
     }, 3_000);
   };
 
@@ -283,12 +249,8 @@ export default function ChatWidget({}: // initiallyOpen = false,
                   previewConfig={{ showPreview: false }}
                   width={300}
                   height={315}
-                  style={
-                    {
-                      "--epr-emoji-size": "20px",
-                    } as React.CSSProperties
-                  }
-                ></EmojiPicker>
+                  style={{ "--epr-emoji-size": "20px" } as React.CSSProperties}
+                />
               </div>
             )}
             <button
