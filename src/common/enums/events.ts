@@ -4,17 +4,17 @@ export const CHAT = {
   // Client → Server
   SendGroup: 'sendGroupChatMessage',
   SendServer: 'sendPrivateMessage',
-  Typing: 'typing',
 
   // Server → Client
   GroupMessage: 'groupChatMessage',
   PrivateMessage: 'privateChatMessage',
+  Reply: 'reply',
 
   // Errors
   Error: 'error',
 
   // Other
-  Reply: 'reply',
+  Typing: 'typing',
 } as const;
 
 // Optionally type for convenience:
