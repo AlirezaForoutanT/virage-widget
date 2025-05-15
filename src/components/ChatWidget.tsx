@@ -17,6 +17,8 @@ import EmojiPicker, { Theme, EmojiClickData } from "emoji-picker-react";
 
 import { Error } from "@/common/interfaces/error.interface";
 import { ErrorCode } from "@/common/error-codes";
+import { CHAT } from '@/common/enums/events';
+
 interface Props {
   initiallyOpen?: boolean;
   showToggleButton?: boolean;
@@ -65,11 +67,11 @@ export default function ChatWidget({}: Props) {
       animateResponse(msg.data);
     };
 
-    socket.on("chat.privateChatMessage", onPrivate);
-    socket.on("chat.typing", (data) => {
+    socket.on(CHAT.PrivateMessage, onPrivate);
+    socket.on(CHAT.Typing, (data) => {
       setTyping(data.typing);
     });
-    socket.on("error", async (data: Error) => {
+    socket.on(CHAT.Error, async (data: Error) => {
       console.error("[ws] error:", data.message);
       if (data.code === ErrorCode.RATE_LIMIT_MESSAGES) {
         setMessageTimeOut(true);
@@ -78,8 +80,8 @@ export default function ChatWidget({}: Props) {
     });
 
     return () => {
-      socket.off("chat.privateChatMessage", onPrivate);
-      socket.off("chat.typing");
+      socket.off(CHAT.PrivateMessage, onPrivate);
+      socket.off(CHAT.Typing);
     };
   }, [socket, userId]);
 
@@ -134,8 +136,8 @@ export default function ChatWidget({}: Props) {
       { id, from: "user", text, ts: Date.now() },
     ]);
 
-    socket.emit("chat.stopWriting", { userId, typing: false });
-    socket.emit("chat.sendPrivateMessage", { userId, message: text });
+    socket.emit(CHAT.Typing, { userId, typing: false });
+    socket.emit(CHAT.SendServer, { userId, message: text });
 
     setInput("");
   };
@@ -149,9 +151,9 @@ export default function ChatWidget({}: Props) {
 
     if (typingTimeout.current) clearTimeout(typingTimeout.current);
 
-    socket.emit("chat.typing", { userId });
+    socket.emit(CHAT.Typing, { userId, typing: true });
     // typingTimeout.current = setTimeout(() => {
-    //   socket.emit("chat.typing", { userId, typing: false });
+    //   socket.emit(CHAT.Typing, { userId, typing: false });
     // }, 3_000);
   };
 
