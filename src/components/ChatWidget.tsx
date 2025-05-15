@@ -15,6 +15,8 @@ import { useAuth } from "@/providers/AuthProvider";
 import { CountdownCircleTimer } from "react-countdown-circle-timer";
 import EmojiPicker, { Theme, EmojiClickData } from "emoji-picker-react";
 
+import { Error } from "@/common/interfaces/error.interface";
+import { ErrorCode } from "@/common/error-codes";
 interface Props {
   initiallyOpen?: boolean;
   showToggleButton?: boolean;
@@ -63,26 +65,26 @@ export default function ChatWidget({}: Props) {
       animateResponse(msg.data);
     };
 
-    socket.on("privateChatMessage", onPrivate);
-    socket.on("userTyping", () => setTyping(true));
-    socket.on("stoppedTyping", () => setTyping(false));
-    socket.on("error", async (msg: unknown) => {
-      console.error("[ws] error:", msg);
-      if (msg === "Too many messages") {
+    socket.on("chat.privateChatMessage", onPrivate);
+    socket.on("chat.typing", (data) => {
+      setTyping(data.typing);
+    });
+    socket.on("error", async (data: Error) => {
+      console.error("[ws] error:", data.message);
+      if (data.code === ErrorCode.RATE_LIMIT_MESSAGES) {
         setMessageTimeOut(true);
         setInput("");
       }
     });
 
     return () => {
-      socket.off("privateChatMessage", onPrivate);
-      socket.off("userTyping");
-      socket.off("stoppedTyping");
+      socket.off("chat.privateChatMessage", onPrivate);
+      socket.off("chat.typing");
     };
   }, [socket, userId]);
 
   // Scroll to bottom whenever messages or typing flag change
-    useEffect(() => {
+  useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [messages, typing]);
 
@@ -132,8 +134,8 @@ export default function ChatWidget({}: Props) {
       { id, from: "user", text, ts: Date.now() },
     ]);
 
-    socket.emit("typing", { userId, typing: false });
-    socket.emit("sendPrivateMessage", { userId, message: text });
+    socket.emit("chat.stopWriting", { userId, typing: false });
+    socket.emit("chat.sendPrivateMessage", { userId, message: text });
 
     setInput("");
   };
@@ -147,10 +149,10 @@ export default function ChatWidget({}: Props) {
 
     if (typingTimeout.current) clearTimeout(typingTimeout.current);
 
-    socket.emit("typing", { userId, typing: true });
-    typingTimeout.current = setTimeout(() => {
-      socket.emit("typing", { userId, typing: false });
-    }, 3_000);
+    socket.emit("chat.typing", { userId });
+    // typingTimeout.current = setTimeout(() => {
+    //   socket.emit("chat.typing", { userId, typing: false });
+    // }, 3_000);
   };
 
   /* ───────────────────────────────────────

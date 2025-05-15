@@ -2,7 +2,8 @@
 import { io, Socket } from "socket.io-client";
 import { WS_URL, RECONNECT_DELAY } from "@/config/socket";
 import { getJwt } from "@/store/auth/token";
-
+import { Error } from "@/common/interfaces/error.interface";
+import { ErrorCode } from "@/common/error-codes";
 let socketPromise: Promise<Socket> | null = null;
 
 async function makeSocket(): Promise<Socket> {
@@ -19,8 +20,8 @@ async function makeSocket(): Promise<Socket> {
       resolve(sock);
     });
     sock.on("connect_error", console.error);
-    sock.on("error", async (msg: unknown) => {
-      if (msg === "Invalid or expired token") {
+    sock.on("error", async (data: Error) => {
+      if (data.code === ErrorCode.AUTH_TOKEN_EXPIRED) {
         const fresh = await getJwt(true);
         sock.auth = { token: fresh };
         sock.disconnect();

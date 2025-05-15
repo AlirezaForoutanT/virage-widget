@@ -1,6 +1,7 @@
 //  src/store/auth/api.ts
 
 import { JWT_KEY } from "@/config/cookies";
+import { ErrorMessage, ErrorCode } from "@/common/error-codes";
 
 interface GuestTokenResponse {
   token: string;
@@ -14,7 +15,7 @@ const API_BASE =
  */
 export async function fetchGuestToken(): Promise<string> {
   const r = await fetch(`${API_BASE}/auth/guest`, { method: "POST" });
-  if (!r.ok) throw new Error(`guest token fetch failed: ${r.status}`);
+  if (!r.ok) throw new Error(`${ErrorMessage[ErrorCode.AUTH_FETCH_FAILED]}: ${r.status}`);
   const { token } = (await r.json()) as GuestTokenResponse;
 
   try {
