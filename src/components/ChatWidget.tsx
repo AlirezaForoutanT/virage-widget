@@ -17,7 +17,8 @@ import EmojiPicker, { Theme, EmojiClickData } from "emoji-picker-react";
 
 import { Error } from "@/common/interfaces/error.interface";
 import { ErrorCode } from "@/common/error-codes";
-import { CHAT } from '@/common/enums/events';
+
+import { CHAT } from "@/common/enums/events";
 
 interface Props {
   initiallyOpen?: boolean;
@@ -28,7 +29,11 @@ export default function ChatWidget({}: Props) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [typing, setTyping] = useState(false);
-  const [messageTimeOut, setMessageTimeOut] = useState(false);
+  const [socketError, setSocketError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<Error>({
+    code: 0,
+    message: "",
+  });
   const [dotCount, setDotCount] = useState(1);
   const [showPicker, setShowPicker] = useState(false);
 
@@ -60,30 +65,39 @@ export default function ChatWidget({}: Props) {
   ----------------------------------------------------------- */
   useEffect(() => {
     if (!socket || !userId) return;
-
+  
     /* incoming replies */
     const onPrivate = (msg: { data: string }) => {
       setTyping(false);
       animateResponse(msg.data);
     };
-
-    socket.on(CHAT.PrivateMessage, onPrivate);
-    socket.on(CHAT.Typing, (data) => {
+    const onTyping = (data: { typing: boolean }) => {
       setTyping(data.typing);
-    });
-    socket.on(CHAT.Error, async (data: Error) => {
-      console.error("[ws] error:", data.message);
-      if (data.code === ErrorCode.RATE_LIMIT_MESSAGES) {
-        setMessageTimeOut(true);
-        setInput("");
-      }
-    });
-
+    };
+  
+    socket.on(CHAT.PrivateMessage, onPrivate);
+    socket.on(CHAT.Typing, onTyping);
+  
     return () => {
       socket.off(CHAT.PrivateMessage, onPrivate);
-      socket.off(CHAT.Typing);
+      socket.off(CHAT.Typing, onTyping);
     };
   }, [socket, userId]);
+  
+
+  // — Error events
+  useEffect(() => {
+    if (!socket) return;
+    const onError = (err: Error) => {
+      console.error("[ws] error:", err.message);
+      setSocketError(true);
+      setErrorMessage(err);
+      setInput("");
+    };
+
+    socket.on(CHAT.Error, onError);
+    return () => void socket.off(CHAT.Error, onError);
+  }, [socket]);
 
   // Scroll to bottom whenever messages or typing flag change
   useEffect(() => {
@@ -207,20 +221,22 @@ export default function ChatWidget({}: Props) {
             <div className="relative flex-1">
               <textarea
                 className={clsx(
-                  "w-full resize-none max-h-24 rounded-md border px-2 py-2 text-sm focus:outline-none",
-                  messageTimeOut
-                    ? "border-green-500 placeholder-green-800  bg-red-50 dark:bg-green-500 placeholder:font-bold"
-                    : "border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                  "w-full resize-none max-h-24 rounded-md border px-2 py-2 text-sm focus:outline-none border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100",
+                  socketError
+                    ? errorMessage.code === ErrorCode.RATE_LIMIT_MESSAGES
+                      ? "border-green-500 placeholder-green-800 bg-green-50 placeholder:font-bold"
+                      : "border-red-500   placeholder-red-800 bg-red-50 placeholder:font-bold"
+                    : ""
                 )}
                 placeholder={
-                  messageTimeOut ? "Please wait 5 seconds" : "Write a message…"
+                  socketError ? errorMessage.message : "Write a message…"
                 }
                 value={input}
                 rows={1}
                 ref={textareaRef}
-                disabled={messageTimeOut}
+                disabled={socketError}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey && !messageTimeOut) {
+                  if (e.key === "Enter" && !e.shiftKey && !socketError) {
                     e.preventDefault();
                     handleSend();
                   }
@@ -230,8 +246,9 @@ export default function ChatWidget({}: Props) {
               {/* Emoji button */}
               <button
                 type="button"
-                className="absolute top-4.5 right-2 -translate-y-1/2 rounded p-1 cursor-pointer text-primary-600 hover:text-amber-300 dark:hover:bg-gray-800"
+                className="absolute top-4.5 right-2 -translate-y-1/2 rounded p-1 cursor-pointer text-primary-600 hover:text-amber-300"
                 onClick={() => setShowPicker((v) => !v)}
+                disabled={socketError}
               >
                 <Smile className="h-4.5 w-4.5" />
               </button>
@@ -260,9 +277,10 @@ export default function ChatWidget({}: Props) {
             <button
               type="submit"
               className="rounded-md p-2 text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-800 mb-1.5"
-              disabled={!input.trim() || messageTimeOut}
+              disabled={!input.trim() || socketError}
             >
-              {messageTimeOut ? (
+              {socketError &&
+              errorMessage.code === ErrorCode.RATE_LIMIT_MESSAGES ? (
                 <div>
                   <CountdownCircleTimer
                     duration={5}
@@ -270,9 +288,9 @@ export default function ChatWidget({}: Props) {
                     size={20}
                     strokeWidth={1}
                     trailStrokeWidth={2}
-                    isPlaying={messageTimeOut}
+                    isPlaying={socketError}
                     onComplete={() => {
-                      setMessageTimeOut(false);
+                      setSocketError(false);
                     }}
                   >
                     {/* {({ remainingTime }) => remainingTime} */}
