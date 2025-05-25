@@ -5,10 +5,10 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { User } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-
+import { Role } from "@/common/enums/roles";
 export interface ChatMessage {
   id: string;
-  from: "user" | "ai";
+  from: Role;
   text: string;
 }
 
@@ -18,7 +18,7 @@ interface ChatBubbleProps {
 
 // A single chat message bubble with basic markdown support.
 export default function ChatBubble({ message }: ChatBubbleProps) {
-  const isUser = message.from === "user";
+  const isUser = message.from === Role.User;
   const timeString = new Date().toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",

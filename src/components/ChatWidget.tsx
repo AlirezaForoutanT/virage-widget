@@ -16,9 +16,11 @@ import { CountdownCircleTimer } from "react-countdown-circle-timer";
 import EmojiPicker, { Theme, EmojiClickData } from "emoji-picker-react";
 
 import { Error } from "@/common/interfaces/error.interface";
+import { Message } from "@/common/interfaces/message.interface";
 import { ErrorCode } from "@/common/error-codes";
 
 import { CHAT } from "@/common/enums/events";
+import { Role } from "@/common/enums/roles";
 
 interface Props {
   initiallyOpen?: boolean;
@@ -65,25 +67,27 @@ export default function ChatWidget({}: Props) {
   ----------------------------------------------------------- */
   useEffect(() => {
     if (!socket || !userId) return;
-  
+
     /* incoming replies */
-    const onPrivate = (msg: { data: string }) => {
+    const onPrivate = (payload: Message) => {
       setTyping(false);
-      animateResponse(msg.data);
+      animateResponse(payload.message);
     };
+
     const onTyping = (data: { typing: boolean }) => {
       setTyping(data.typing);
     };
-  
+
     socket.on(CHAT.PrivateMessage, onPrivate);
     socket.on(CHAT.Typing, onTyping);
-  
+    socket.on(CHAT.Reply, onPrivate);
+
     return () => {
       socket.off(CHAT.PrivateMessage, onPrivate);
       socket.off(CHAT.Typing, onTyping);
+      socket.off(CHAT.Reply, onPrivate);
     };
   }, [socket, userId]);
-  
 
   // — Error events
   useEffect(() => {
@@ -121,7 +125,7 @@ export default function ChatWidget({}: Props) {
     const id = crypto.randomUUID();
     setMessages((prev) => [
       ...prev,
-      { id, from: "ai", text: "", ts: Date.now() },
+      { id, from: Role.Server, text: "", ts: Date.now() },
     ]);
     let idx = 0;
     const interval = setInterval(() => {
@@ -147,12 +151,12 @@ export default function ChatWidget({}: Props) {
     const id = crypto.randomUUID();
     setMessages((prev) => [
       ...prev,
-      { id, from: "user", text, ts: Date.now() },
+      { id, from: Role.User, text, ts: Date.now() },
     ]);
 
     socket.emit(CHAT.Typing, { userId, typing: false });
     socket.emit(CHAT.SendServer, { userId, message: text });
-
+    // socket.emit(CHAT.SendServer, { userId, message: userId });
     setInput("");
   };
 
@@ -202,8 +206,8 @@ export default function ChatWidget({}: Props) {
             {typing && (
               <ChatBubble
                 message={{
-                  id: "typing",
-                  from: "ai",
+                  id: CHAT.Typing,
+                  from: Role.Server,
                   text: ".".repeat(dotCount),
                 }}
               />
