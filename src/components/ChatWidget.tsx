@@ -69,39 +69,32 @@ export default function ChatWidget({}: Props) {
     if (!socket || !userId) return;
 
     /* incoming replies */
-    const onPrivate = (payload: Message) => {
+    const onPrivate = (data: Message) => {
       setTyping(false);
-      animateResponse(payload.message);
+      animateResponse(data.message);
     };
 
     const onTyping = (data: { typing: boolean }) => {
       setTyping(data.typing);
     };
-
-    socket.on(CHAT.PrivateMessage, onPrivate);
-    socket.on(CHAT.Typing, onTyping);
-    socket.on(CHAT.Reply, onPrivate);
-
-    return () => {
-      socket.off(CHAT.PrivateMessage, onPrivate);
-      socket.off(CHAT.Typing, onTyping);
-      socket.off(CHAT.Reply, onPrivate);
-    };
-  }, [socket, userId]);
-
-  // — Error events
-  useEffect(() => {
-    if (!socket) return;
     const onError = (err: Error) => {
       console.error("[ws] error:", err.message);
       setSocketError(true);
       setErrorMessage(err);
       setInput("");
     };
-
+    socket.on(CHAT.PrivateMessage, onPrivate);
+    socket.on(CHAT.Typing, onTyping);
+    socket.on(CHAT.Reply, onPrivate);
     socket.on(CHAT.Error, onError);
-    return () => void socket.off(CHAT.Error, onError);
-  }, [socket]);
+
+    return () => {
+      socket.off(CHAT.PrivateMessage);
+      socket.off(CHAT.Typing);
+      socket.off(CHAT.Reply);
+      socket.off(CHAT.Error)
+    };
+  }, [socket, userId]);
 
   // Scroll to bottom whenever messages or typing flag change
   useEffect(() => {
